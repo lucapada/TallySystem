@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>TallySystem</title>
+    <link rel="stylesheet" href="res/icofont/icofont.min.css">
+    <style>
+        * { 
+            margin: 0;
+            padding: 0;
+            border-collapse: collapse;
+        }
+
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        video {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        .dettagli {
+            position: absolute;
+            z-index: 1;
+            width: calc(100vw - 100px);
+            height: calc(100vh - 100px);
+            top: 0;
+            left: 0;
+            margin: 50px;
+            border: 10px solid transparent;
+            box-sizing: border-box;
+            display: flex;
+            align-items: end;
+            justify-content: center;
+        }
+
+        .program {
+            border: 10px inset red;
+        }
+        .preview {
+            border: 10px inset green;
+        }
+
+        .info {
+            bottom: 0 !important;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+            background-color: rgba(0,0,0,0.5);
+            color:white;
+            text-shadow: 1px 1px 2px black;
+            padding: 10px;
+        }
+
+        .player:-webkit-full-screen {
+            width: 100%;
+            height: 100%;
+        }
+        .player:-moz-full-screen {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/node_modules/jquery/dist/jquery.min.js"></script>
+    <script type="text/javascript" src="res/js/jquery-1.10.2.min.js"></script>
+    <script type="text/javascript" src="res/js/adapter-7.4.0.min.js"></script>
+    <script type="text/javascript" src="res/js/srs.sdk.js"></script>
+    <script type="text/javascript" src="res/js/winlin.utility.js"></script>
+    <script type="text/javascript" src="res/js/srs.page.js"></script>
+</head>
+
+<body>
+    
+    <div class="video-container">
+        <video id="rtc_media_player" autoplay controls poster="res/poster.jpg">
+    </div>
+
+    <div class="dettagli">
+        <div class="info">
+            <span class="icofont-boy"></span>
+            <span id="cameraName" style="font-weight: bold;"></span>
+            <span class="icofont-video-cam"></span>
+            <span id="cameraId" style="font-weight: bold;"></span>
+            <div style="display:none;">
+                <input type="checkbox" id="chkTorch" checked />
+                <label for="chkTorch"><span class="icofont-flash"></span></label>
+            </div>
+            <span id="openFullscreen" class="icofont-ui-zoom-in" onclick="openFullscreen();"></span>
+            <span id="closeFullscreen" class="icofont-ui-zoom-out" onclick="closeFullscreen();"></span>
+            <span class="icofont-refresh" onclick="startPlay();"></span>
+        </div>
+    </div>
+    
+    <script>
+        var socket = io();
+        var name, cameraId, streamingURL;
+
+        // Socket Events
+        socket.on('cameraUpdate', function (aStatus) {
+            if (cameraId > 0) {
+                if (cameraId == aStatus.PROGRAM) {
+                    if(torchAvailable && document.getElementById("chkTorch").checked){
+                        torch(true);
+                    }
+                    document.getElementsByClassName("dettagli")[0].className = "dettagli program";
+                } else if (cameraId == aStatus.PREVIEW) {
+                    if(torchAvailable){
+                        torch(false);
+                    }
+                    document.getElementsByClassName("dettagli")[0].className = "dettagli preview";
+                } else {
+                    if(torchAvailable){
+                        torch(false);
+                    }
+                    document.getElementsByClassName("dettagli")[0].className = "dettagli";
+                }
+            }
+        });
+
+        socket.on('notify', function (msg) {
+            alert(msg);
+        });
+
+
+        socket.on('streaming', function (msg) {
+            streamingURL = msg;
+            // $("#rtc_media_player").hide();
+            var query = parse_query_string();
+            srs_init_rtc(url, query);
+
+            $("#rtc_media_player").prop("muted", true);
+            startPlay();
+        });
+
+        var startPlay = function(){
+            // $("#rtc_media_player").show();
+            var sdk = null;
+            if(sdk) sdk.close();
+            sdk = new SrsRtcPlayerAsync();
+            $("#rtc_media_player").prop("srcObject", sdk.stream);
+            var url = streamingURL;
+            sdk.play(url).then(function(session){
+
+            }).catch(function(reason){
+                sdk.close();
+                $("#rtc_media_player").hide();
+                console.log(reason);
+            })
+        };
+
+        // Torch 
+        var torchAvailable = false;
+        const SUPPORTS_MEDIA_DEVICES = 'mediaDevices' in navigator;
+        function torch(val){
+            if (SUPPORTS_MEDIA_DEVICES) {
+                //Get the environment camera (usually the second one)
+                navigator.mediaDevices.enumerateDevices().then(devices => {
+                    const cameras = devices.filter((device) => device.kind === 'videoinput');
+                    if (cameras.length === 0) {
+                        throw 'No camera found on this device.';
+                    }
+                    const camera = cameras[cameras.length - 1];
+                    // Create stream and get video track
+                    navigator.mediaDevices.getUserMedia({
+                        video: {
+                            deviceId: camera.deviceId,
+                            facingMode: ['user', 'environment'],
+                            height: { ideal: 1080 },
+                            width: { ideal: 1920 }
+                        }
+                    }).then(stream => {
+                        torchAvailable = true;
+                        document.getElementById("pnlTorch").style="display:inline;";
+                        
+                        const track = stream.getVideoTracks()[0];
+                        //Create image capture object and get camera capabilities
+                        const imageCapture = new ImageCapture(track)
+                        const photoCapabilities = imageCapture.getPhotoCapabilities().then(() => {
+                            //let there be light!
+                            track.applyConstraints({
+                                advanced: [{ torch: val }]
+                            });    
+                        });
+                    });
+                });
+            }
+        }
+
+        document.getElementById("chkTorch").addEventListener("change", function(e){
+            if(torchAvailable && !document.getElementById("chkTorch").checked){
+                torch(false);
+            }
+        })
+
+        // Fullscreen Management
+        var elem = document.documentElement;
+        function openFullscreen() {
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) { /* Safari */
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) { /* IE11 */
+                elem.msRequestFullscreen();
+            }
+        }
+        function closeFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) { /* IE11 */
+                document.msExitFullscreen();
+            }
+        }
+    
+        // Camera Join
+        function joinCamera() {
+            name = "";
+            cameraId = 0;
+            datiOK = false;
+            while(!datiOK){
+                if (name == "" || cameraId <= 0) {
+                    name = prompt("Inserisci Nome:");
+                    cameraId = parseInt(prompt("Inserisci Numero Camera:"));
+                } else { datiOK = true; }
+            }
+            document.getElementById("cameraId").innerHTML = cameraId;
+            document.getElementById("cameraName").innerHTML = name;
+            socket.emit("joinCamera", { id: socket.id, name: name, cameraId: cameraId });
+        }
+        joinCamera();
+    </script>
+
+</body>
+
+</html>
