@@ -12,16 +12,19 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            text-align: center;
         }
+        img {}
     </style>
 </head>
 <body>
-    <h1>QRCode</h1>
-    <canvas id="canvas"></canvas>
+    <h1>Scannerizzare il QRCode con l'app</h1>
+    <img id="qrImage" />
+    <script src="/node_modules/jquery/dist/jquery.min.js"></script>
     <script src="/node_modules/qrcode/build/qrcode.js"></script>
     <script>
-        QRCode.toCanvas(document.getElementById('canvas'), window.location.hostname, function (error) {
-            if (error) console.error(error)
+        QRCode.toDataURL(window.location.hostname, { errorCorrectionLevel: 'H', width: 250 }, function (err, url) {
+            $("#qrImage").attr("src", url);
         })
     </script>
 </body>
