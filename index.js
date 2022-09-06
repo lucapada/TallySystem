@@ -19,6 +19,9 @@ var atemStatus = {
 app.use('/res', express.static('client'));
 app.use("/node_modules", express.static(path.join(__dirname, '/node_modules/')));
 app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/client/qrcode.html');
+});
+app.get('/monitor', (req, res) => {
     res.sendFile(__dirname + '/client/index.html');
 });
 
